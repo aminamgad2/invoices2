@@ -1,0 +1,74 @@
+<% const title = 'إدارة العملاء'; %>
+<%- include('../layout', { title, body: `
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">إدارة العملاء</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        ${currentUser.role === 'admin' || currentUser.permissions.canManageClients ? `
+            <a href="/clients/new" class="btn btn-primary">
+                <i class="fas fa-plus"></i>
+                إضافة عميل جديد
+            </a>
+        ` : ''}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        ${clients && clients.length > 0 ? `
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>الاسم الكامل</th>
+                            <th>رقم الجوال</th>
+                            <th>نسبة العمولة</th>
+                            <th>الملاحظات</th>
+                            <th>تم الإنشاء بواسطة</th>
+                            <th>تاريخ الإنشاء</th>
+                            ${currentUser.role === 'admin' || currentUser.permissions.canManageClients ? '<th>الإجراءات</th>' : ''}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${clients.map(client => `
+                            <tr>
+                                <td><strong>${client.fullName}</strong></td>
+                                <td>${client.mobileNumber}</td>
+                                <td><span class="badge bg-info">%${client.commissionRate}</span></td>
+                                <td>${client.notes || 'لا توجد ملاحظات'}</td>
+                                <td>${client.createdBy?.username || 'غير محدد'}</td>
+                                <td>${new Date(client.createdAt).toLocaleDateString('ar-EG')}</td>
+                                ${currentUser.role === 'admin' || currentUser.permissions.canManageClients ? `
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <a href="/clients/${client._id}/edit" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <form method="POST" action="/clients/${client._id}?_method=DELETE" style="display: inline;">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذا العميل؟')">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                ` : ''}
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        ` : `
+            <div class="text-center py-5">
+                <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">لا توجد عملاء حالياً</h5>
+                <p class="text-muted">ابدأ بإضافة عميل جديد</p>
+                ${currentUser.role === 'admin' || currentUser.permissions.canManageClients ? `
+                    <a href="/clients/new" class="btn btn-primary">
+                        <i class="fas fa-plus"></i>
+                        إضافة عميل جديد
+                    </a>
+                ` : ''}
+            </div>
+        `}
+    </div>
+</div>
+` }) %>

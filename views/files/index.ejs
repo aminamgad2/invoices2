@@ -1,0 +1,76 @@
+<% const title = 'إدارة الملفات'; %>
+<%- include('../layout', { title, body: `
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">إدارة الملفات</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="/files/new" class="btn btn-primary">
+            <i class="fas fa-plus"></i>
+            إضافة ملف جديد
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        ${files && files.length > 0 ? `
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>اسم الملف</th>
+                            <th>الشركة</th>
+                            <th>الحالة</th>
+                            <th>الملاحظات</th>
+                            <th>تم الإنشاء بواسطة</th>
+                            <th>تاريخ الإنشاء</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${files.map(file => `
+                            <tr>
+                                <td><strong>${file.fileName}</strong></td>
+                                <td>${file.company?.name || 'غير محدد'}</td>
+                                <td>
+                                    ${file.status === 'active' ? '<span class="badge bg-success">نشط</span>' :
+                                      file.status === 'archived' ? '<span class="badge bg-secondary">مؤرشف</span>' :
+                                      file.status === 'under_review' ? '<span class="badge bg-warning">قيد المراجعة</span>' :
+                                      '<span class="badge bg-info">مكتمل</span>'}
+                                </td>
+                                <td>${file.notes || 'لا توجد ملاحظات'}</td>
+                                <td>${file.createdBy?.username || 'غير محدد'}</td>
+                                <td>${new Date(file.createdAt).toLocaleDateString('ar-EG')}</td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="/uploads/${file.pdfPath}" target="_blank" class="btn btn-sm btn-outline-info">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="/files/${file._id}/edit" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <form method="POST" action="/files/${file._id}?_method=DELETE" style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذا الملف؟')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        ` : `
+            <div class="text-center py-5">
+                <i class="fas fa-folder fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">لا توجد ملفات حالياً</h5>
+                <p class="text-muted">ابدأ بإضافة ملف جديد</p>
+                <a href="/files/new" class="btn btn-primary">
+                    <i class="fas fa-plus"></i>
+                    إضافة ملف جديد
+                </a>
+            </div>
+        `}
+    </div>
+</div>
+` }) %>
