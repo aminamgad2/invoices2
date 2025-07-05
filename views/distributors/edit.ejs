@@ -45,51 +45,8 @@
                                             <th class="text-center">حذف</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        <%
-                                        const moduleOrder = ['companies', 'clients', 'files', 'invoices', 'distributors', 'reports'];
-                                        const moduleNames = {
-                                            'companies': 'الشركات',
-                                            'clients': 'العملاء',
-                                            'files': 'الملفات', 
-                                            'invoices': 'الفواتير',
-                                            'distributors': 'الموزعين',
-                                            'reports': 'التقارير'
-                                        };
-                                        const actionOrder = ['view_own', 'view_all', 'create', 'update', 'delete'];
-                                        
-                                        moduleOrder.forEach(module => {
-                                            if (groupedPermissions[module]) {
-                                        %>
-                                                <tr>
-                                                    <td class="module-name"><%= moduleNames[module] %></td>
-                                                    <%
-                                                    actionOrder.forEach(action => {
-                                                        const permission = groupedPermissions[module].find(p => p.action === action);
-                                                        if (permission) {
-                                                            const isChecked = userPermissions.includes(permission._id.toString());
-                                                    %>
-                                                            <td>
-                                                                <input type="checkbox" 
-                                                                       name="permissions" 
-                                                                       value="<%= permission._id %>" 
-                                                                       id="perm_<%= permission._id %>"
-                                                                       <%= isChecked ? 'checked' : '' %>
-                                                                       class="form-check-input">
-                                                            </td>
-                                                    <%
-                                                        } else {
-                                                    %>
-                                                            <td>-</td>
-                                                    <%
-                                                        }
-                                                    });
-                                                    %>
-                                                </tr>
-                                        <%
-                                            }
-                                        });
-                                        %>
+                                    <tbody id="permissionsTableBody">
+                                        <!-- Permissions will be populated by JavaScript -->
                                     </tbody>
                                 </table>
                             </div>
@@ -247,6 +204,54 @@
 const groupedPermissions = ${JSON.stringify(groupedPermissions)};
 const userPermissions = ${JSON.stringify(userPermissions)};
 
+function generatePermissionRows() {
+    const moduleOrder = ['companies', 'clients', 'files', 'invoices', 'distributors', 'reports'];
+    const moduleNames = {
+        'companies': 'الشركات',
+        'clients': 'العملاء',
+        'files': 'الملفات', 
+        'invoices': 'الفواتير',
+        'distributors': 'الموزعين',
+        'reports': 'التقارير'
+    };
+    
+    const actionOrder = ['view_own', 'view_all', 'create', 'update', 'delete'];
+    
+    let rows = '';
+    
+    moduleOrder.forEach(module => {
+        if (groupedPermissions[module]) {
+            rows += \`
+                <tr>
+                    <td class="module-name">\${moduleNames[module]}</td>
+            \`;
+            
+            actionOrder.forEach(action => {
+                const permission = groupedPermissions[module].find(p => p.action === action);
+                if (permission) {
+                    const isChecked = userPermissions.includes(permission._id.toString());
+                    rows += \`
+                        <td>
+                            <input type="checkbox" 
+                                   name="permissions" 
+                                   value="\${permission._id}" 
+                                   id="perm_\${permission._id}"
+                                   \${isChecked ? 'checked' : ''}
+                                   class="form-check-input">
+                        </td>
+                    \`;
+                } else {
+                    rows += '<td>-</td>';
+                }
+            });
+            
+            rows += '</tr>';
+        }
+    });
+    
+    return rows;
+}
+
 function applyDefaultPermissions() {
     // Apply default permissions based on module
     const defaultSettings = {
@@ -286,5 +291,13 @@ function applyDefaultPermissions() {
         }
     }, 3000);
 }
+
+// Initialize permissions table on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const tbody = document.getElementById('permissionsTableBody');
+    if (tbody) {
+        tbody.innerHTML = generatePermissionRows();
+    }
+});
 </script>
 ` }) %>
