@@ -1,27 +1,40 @@
 import express from 'express';
 import Company from '../models/Company.js';
-import { checkPermission } from '../middleware/auth.js';
+import { requireModuleAccess, requirePermission } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // List companies
-router.get('/', async (req, res) => {
+router.get('/', requireModuleAccess('companies'), async (req, res) => {
   try {
-    const companies = await Company.find().populate('createdBy', 'username').sort({ createdAt: -1 });
-    res.render('companies/index', { companies });
+    let query = {};
+    
+    // If user can only view own, filter by creator
+    if (!req.userPermissionLevel.canViewAll && req.userPermissionLevel.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const companies = await Company.find(query).populate('createdBy', 'username').sort({ createdAt: -1 });
+    res.render('companies/index', { 
+      companies,
+      userPermissions: req.userPermissionLevel
+    });
   } catch (error) {
     req.flash('error', 'حدث خطأ أثناء تحميل الشركات');
-    res.render('companies/index', { companies: [] });
+    res.render('companies/index', { 
+      companies: [],
+      userPermissions: req.userPermissionLevel || {}
+    });
   }
 });
 
 // New company form
-router.get('/new', checkPermission('canCreateCompanies'), (req, res) => {
+router.get('/new', requirePermission('companies', 'create'), (req, res) => {
   res.render('companies/new');
 });
 
 // Create company
-router.post('/', checkPermission('canCreateCompanies'), async (req, res) => {
+router.post('/', requirePermission('companies', 'create'), async (req, res) => {
   try {
     const { name, commissionRate } = req.body;
     
@@ -41,11 +54,18 @@ router.post('/', checkPermission('canCreateCompanies'), async (req, res) => {
 });
 
 // Edit company form
-router.get('/:id/edit', checkPermission('canCreateCompanies'), async (req, res) => {
+router.get('/:id/edit', requirePermission('companies', 'update'), async (req, res) => {
   try {
-    const company = await Company.findById(req.params.id);
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they own this company
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const company = await Company.findOne(query);
     if (!company) {
-      req.flash('error', 'الشركة غير موجودة');
+      req.flash('error', 'الشركة غير موجودة أو ليس لديك صلاحية للوصول إليها');
       return res.redirect('/companies');
     }
     res.render('companies/edit', { company });
@@ -56,14 +76,26 @@ router.get('/:id/edit', checkPermission('canCreateCompanies'), async (req, res) 
 });
 
 // Update company
-router.put('/:id', checkPermission('canCreateCompanies'), async (req, res) => {
+router.put('/:id', requirePermission('companies', 'update'), async (req, res) => {
   try {
     const { name, commissionRate } = req.body;
     
-    await Company.findByIdAndUpdate(req.params.id, {
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they own this company
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const result = await Company.updateOne(query, {
       name,
       commissionRate: parseFloat(commissionRate) || 0
     });
+    
+    if (result.matchedCount === 0) {
+      req.flash('error', 'الشركة غير موجودة أو ليس لديك صلاحية لتعديلها');
+      return res.redirect('/companies');
+    }
     
     req.flash('success', 'تم تحديث بيانات الشركة بنجاح');
     res.redirect('/companies');
@@ -74,9 +106,22 @@ router.put('/:id', checkPermission('canCreateCompanies'), async (req, res) => {
 });
 
 // Delete company
-router.delete('/:id', checkPermission('canCreateCompanies'), async (req, res) => {
+router.delete('/:id', requirePermission('companies', 'delete'), async (req, res) => {
   try {
-    await Company.findByIdAndDelete(req.params.id);
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they own this company
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const result = await Company.deleteOne(query);
+    
+    if (result.deletedCount === 0) {
+      req.flash('error', 'الشركة غير موجودة أو ليس لديك صلاحية لحذفها');
+      return res.redirect('/companies');
+    }
+    
     req.flash('success', 'تم حذف الشركة بنجاح');
     res.redirect('/companies');
   } catch (error) {

@@ -5,7 +5,7 @@ import File from '../models/File.js';
 import User from '../models/User.js';
 import Company from '../models/Company.js';
 import CommissionTier from '../models/CommissionTier.js';
-import { checkPermission } from '../middleware/auth.js';
+import { requireModuleAccess, requirePermission } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -36,10 +36,12 @@ async function calculateCommissionRate(entityType, entityId, amount) {
 }
 
 // List invoices
-router.get('/', async (req, res) => {
+router.get('/', requireModuleAccess('invoices'), async (req, res) => {
   try {
     let query = {};
-    if (req.session.user.role !== 'admin') {
+    
+    // If user can only view own, filter by assigned distributor
+    if (!req.userPermissionLevel.canViewAll && req.userPermissionLevel.canViewOwn) {
       query.assignedDistributor = req.session.user.id;
     }
     
@@ -50,15 +52,21 @@ router.get('/', async (req, res) => {
       .populate('createdBy', 'username')
       .sort({ createdAt: -1 });
       
-    res.render('invoices/index', { invoices });
+    res.render('invoices/index', { 
+      invoices,
+      userPermissions: req.userPermissionLevel
+    });
   } catch (error) {
     req.flash('error', 'حدث خطأ أثناء تحميل الفواتير');
-    res.render('invoices/index', { invoices: [] });
+    res.render('invoices/index', { 
+      invoices: [],
+      userPermissions: req.userPermissionLevel || {}
+    });
   }
 });
 
 // New invoice form
-router.get('/new', checkPermission('canCreateInvoices'), async (req, res) => {
+router.get('/new', requirePermission('invoices', 'create'), async (req, res) => {
   try {
     const clients = await Client.find().sort({ fullName: 1 });
     const files = await File.find().populate('company', 'name').sort({ fileName: 1 });
@@ -72,7 +80,7 @@ router.get('/new', checkPermission('canCreateInvoices'), async (req, res) => {
 });
 
 // API endpoint to calculate commission rates
-router.post('/calculate-commission', checkPermission('canCreateInvoices'), async (req, res) => {
+router.post('/calculate-commission', requirePermission('invoices', 'create'), async (req, res) => {
   try {
     const { clientId, distributorId, fileId, amount } = req.body;
     
@@ -105,7 +113,7 @@ router.post('/calculate-commission', checkPermission('canCreateInvoices'), async
 });
 
 // Create invoice
-router.post('/', checkPermission('canCreateInvoices'), async (req, res) => {
+router.post('/', requirePermission('invoices', 'create'), async (req, res) => {
   try {
     const { invoiceCode, client, file, assignedDistributor, invoiceDate, amount } = req.body;
     
@@ -146,15 +154,22 @@ router.post('/', checkPermission('canCreateInvoices'), async (req, res) => {
 });
 
 // Edit invoice form
-router.get('/:id/edit', checkPermission('canCreateInvoices'), async (req, res) => {
+router.get('/:id/edit', requirePermission('invoices', 'update'), async (req, res) => {
   try {
-    const invoice = await Invoice.findById(req.params.id);
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they are assigned to this invoice
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.assignedDistributor = req.session.user.id;
+    }
+    
+    const invoice = await Invoice.findOne(query);
     const clients = await Client.find().sort({ fullName: 1 });
     const files = await File.find().populate('company', 'name').sort({ fileName: 1 });
     const distributors = await User.find({ role: 'distributor', isActive: true }).sort({ username: 1 });
     
     if (!invoice) {
-      req.flash('error', 'الفاتورة غير موجودة');
+      req.flash('error', 'الفاتورة غير موجودة أو ليس لديك صلاحية للوصول إليها');
       return res.redirect('/invoices');
     }
     
@@ -166,9 +181,16 @@ router.get('/:id/edit', checkPermission('canCreateInvoices'), async (req, res) =
 });
 
 // Update invoice
-router.put('/:id', checkPermission('canCreateInvoices'), async (req, res) => {
+router.put('/:id', requirePermission('invoices', 'update'), async (req, res) => {
   try {
     const { invoiceCode, client, file, assignedDistributor, invoiceDate, amount, status } = req.body;
+    
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they are assigned to this invoice
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.assignedDistributor = req.session.user.id;
+    }
     
     const invoiceAmount = parseFloat(amount) || 0;
     
@@ -184,7 +206,7 @@ router.put('/:id', checkPermission('canCreateInvoices'), async (req, res) => {
       companyCommissionRate = await calculateCommissionRate('company', fileData.company._id, invoiceAmount);
     }
     
-    await Invoice.findByIdAndUpdate(req.params.id, {
+    const result = await Invoice.updateOne(query, {
       invoiceCode,
       client,
       file,
@@ -197,6 +219,11 @@ router.put('/:id', checkPermission('canCreateInvoices'), async (req, res) => {
       status
     });
     
+    if (result.matchedCount === 0) {
+      req.flash('error', 'الفاتورة غير موجودة أو ليس لديك صلاحية لتعديلها');
+      return res.redirect('/invoices');
+    }
+    
     req.flash('success', 'تم تحديث الفاتورة بنجاح');
     res.redirect('/invoices');
   } catch (error) {
@@ -206,9 +233,22 @@ router.put('/:id', checkPermission('canCreateInvoices'), async (req, res) => {
 });
 
 // Delete invoice
-router.delete('/:id', checkPermission('canCreateInvoices'), async (req, res) => {
+router.delete('/:id', requirePermission('invoices', 'delete'), async (req, res) => {
   try {
-    await Invoice.findByIdAndDelete(req.params.id);
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they are assigned to this invoice
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.assignedDistributor = req.session.user.id;
+    }
+    
+    const result = await Invoice.deleteOne(query);
+    
+    if (result.deletedCount === 0) {
+      req.flash('error', 'الفاتورة غير موجودة أو ليس لديك صلاحية لحذفها');
+      return res.redirect('/invoices');
+    }
+    
     req.flash('success', 'تم حذف الفاتورة بنجاح');
     res.redirect('/invoices');
   } catch (error) {

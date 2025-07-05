@@ -2,25 +2,39 @@ import express from 'express';
 import File from '../models/File.js';
 import Company from '../models/Company.js';
 import { upload } from '../middleware/upload.js';
+import { requireModuleAccess, requirePermission } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // List files
-router.get('/', async (req, res) => {
+router.get('/', requireModuleAccess('files'), async (req, res) => {
   try {
-    const files = await File.find()
+    let query = {};
+    
+    // If user can only view own, filter by creator
+    if (!req.userPermissionLevel.canViewAll && req.userPermissionLevel.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const files = await File.find(query)
       .populate('company', 'name')
       .populate('createdBy', 'username')
       .sort({ createdAt: -1 });
-    res.render('files/index', { files });
+    res.render('files/index', { 
+      files,
+      userPermissions: req.userPermissionLevel
+    });
   } catch (error) {
     req.flash('error', 'حدث خطأ أثناء تحميل الملفات');
-    res.render('files/index', { files: [] });
+    res.render('files/index', { 
+      files: [],
+      userPermissions: req.userPermissionLevel || {}
+    });
   }
 });
 
 // New file form
-router.get('/new', async (req, res) => {
+router.get('/new', requirePermission('files', 'create'), async (req, res) => {
   try {
     const companies = await Company.find().sort({ name: 1 });
     res.render('files/new', { companies });
@@ -31,7 +45,7 @@ router.get('/new', async (req, res) => {
 });
 
 // Create file
-router.post('/', upload.single('pdf'), async (req, res) => {
+router.post('/', requirePermission('files', 'create'), upload.single('pdf'), async (req, res) => {
   try {
     if (!req.file) {
       req.flash('error', 'يجب اختيار ملف PDF');
@@ -59,13 +73,20 @@ router.post('/', upload.single('pdf'), async (req, res) => {
 });
 
 // Edit file form
-router.get('/:id/edit', async (req, res) => {
+router.get('/:id/edit', requirePermission('files', 'update'), async (req, res) => {
   try {
-    const file = await File.findById(req.params.id);
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they own this file
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const file = await File.findOne(query);
     const companies = await Company.find().sort({ name: 1 });
     
     if (!file) {
-      req.flash('error', 'الملف غير موجود');
+      req.flash('error', 'الملف غير موجود أو ليس لديك صلاحية للوصول إليه');
       return res.redirect('/files');
     }
     
@@ -77,16 +98,28 @@ router.get('/:id/edit', async (req, res) => {
 });
 
 // Update file
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('files', 'update'), async (req, res) => {
   try {
     const { fileName, company, status, notes } = req.body;
     
-    await File.findByIdAndUpdate(req.params.id, {
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they own this file
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const result = await File.updateOne(query, {
       fileName,
       company,
       status,
       notes
     });
+    
+    if (result.matchedCount === 0) {
+      req.flash('error', 'الملف غير موجود أو ليس لديك صلاحية لتعديله');
+      return res.redirect('/files');
+    }
     
     req.flash('success', 'تم تحديث بيانات الملف بنجاح');
     res.redirect('/files');
@@ -97,9 +130,22 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete file
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('files', 'delete'), async (req, res) => {
   try {
-    await File.findByIdAndDelete(req.params.id);
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they own this file
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const result = await File.deleteOne(query);
+    
+    if (result.deletedCount === 0) {
+      req.flash('error', 'الملف غير موجود أو ليس لديك صلاحية لحذفه');
+      return res.redirect('/files');
+    }
+    
     req.flash('success', 'تم حذف الملف بنجاح');
     res.redirect('/files');
   } catch (error) {

@@ -4,12 +4,12 @@ import Client from '../models/Client.js';
 import File from '../models/File.js';
 import User from '../models/User.js';
 import Company from '../models/Company.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireModuleAccess } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Reports dashboard
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireModuleAccess('reports'), async (req, res) => {
   try {
     const {
       startDate,
@@ -30,7 +30,7 @@ router.get('/', requireAuth, async (req, res) => {
     let query = {};
     
     // Role-based filtering
-    if (req.session.user.role !== 'admin') {
+    if (!req.userPermissionLevel.canViewAll && req.userPermissionLevel.canViewOwn) {
       query.assignedDistributor = req.session.user.id;
     }
 
@@ -134,7 +134,8 @@ router.get('/', requireAuth, async (req, res) => {
         totalPages,
         totalInvoices: filteredInvoices.length,
         limit: parseInt(limit)
-      }
+      },
+      userPermissions: req.userPermissionLevel
     });
   } catch (error) {
     console.error('Reports error:', error);
@@ -146,13 +147,14 @@ router.get('/', requireAuth, async (req, res) => {
       distributors: [],
       companies: [],
       filters: {},
-      pagination: {}
+      pagination: {},
+      userPermissions: req.userPermissionLevel || {}
     });
   }
 });
 
 // Export reports data
-router.get('/export', requireAuth, async (req, res) => {
+router.get('/export', requireModuleAccess('reports'), async (req, res) => {
   try {
     const {
       startDate,
@@ -167,7 +169,7 @@ router.get('/export', requireAuth, async (req, res) => {
     // Build query (same as above)
     let query = {};
     
-    if (req.session.user.role !== 'admin') {
+    if (!req.userPermissionLevel.canViewAll && req.userPermissionLevel.canViewOwn) {
       query.assignedDistributor = req.session.user.id;
     }
 

@@ -79,3 +79,45 @@ export const loadUserPermissions = async (req, res, next) => {
   }
   next();
 };
+
+// Check if user has any permission for a module (view_own or view_all)
+export const requireModuleAccess = (module) => {
+  return async (req, res, next) => {
+    try {
+      if (req.session.user.role === 'admin') {
+        return next();
+      }
+
+      const { default: User } = await import('../models/User.js');
+      const user = await User.findById(req.session.user.id);
+      
+      if (!user) {
+        req.flash('error', 'المستخدم غير موجود');
+        return res.redirect('/auth/login');
+      }
+
+      const hasViewOwn = await user.hasPermission(module, 'view_own');
+      const hasViewAll = await user.hasPermission(module, 'view_all');
+      
+      if (!hasViewOwn && !hasViewAll) {
+        req.flash('error', 'ليس لديك صلاحية للوصول إلى هذا القسم');
+        return res.redirect('/dashboard');
+      }
+
+      // Store permission level in request for use in routes
+      req.userPermissionLevel = {
+        canViewOwn: hasViewOwn,
+        canViewAll: hasViewAll,
+        canCreate: await user.hasPermission(module, 'create'),
+        canUpdate: await user.hasPermission(module, 'update'),
+        canDelete: await user.hasPermission(module, 'delete')
+      };
+
+      next();
+    } catch (error) {
+      console.error('Module access check error:', error);
+      req.flash('error', 'حدث خطأ أثناء التحقق من الصلاحيات');
+      return res.redirect('/dashboard');
+    }
+  };
+};

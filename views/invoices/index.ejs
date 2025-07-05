@@ -3,7 +3,7 @@
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2">إدارة الفواتير</h1>
     <div class="btn-toolbar mb-2 mb-md-0">
-        ${currentUser.role === 'admin' || currentUser.permissions.canCreateInvoices ? `
+        ${userPermissions && userPermissions.canCreate ? `
             <a href="/invoices/new" class="btn btn-primary">
                 <i class="fas fa-plus"></i>
                 إنشاء فاتورة جديدة
@@ -26,7 +26,7 @@
                             <th>المبلغ</th>
                             <th>تاريخ الفاتورة</th>
                             <th>الحالة</th>
-                            ${currentUser.role === 'admin' || currentUser.permissions.canCreateInvoices ? '<th>الإجراءات</th>' : ''}
+                            ${userPermissions && (userPermissions.canUpdate || userPermissions.canDelete) ? '<th>الإجراءات</th>' : ''}
                         </tr>
                     </thead>
                     <tbody>
@@ -43,17 +43,21 @@
                                       invoice.status === 'completed' ? '<span class="badge bg-success">مكتملة</span>' :
                                       '<span class="badge bg-danger">ملغية</span>'}
                                 </td>
-                                ${currentUser.role === 'admin' || currentUser.permissions.canCreateInvoices ? `
+                                ${userPermissions && (userPermissions.canUpdate || userPermissions.canDelete) ? `
                                     <td>
                                         <div class="btn-group" role="group">
-                                            <a href="/invoices/${invoice._id}/edit" class="btn btn-sm btn-outline-primary">
-                                                <i class="fas fa-edit"></i>
-                                            </a>
-                                            <form method="POST" action="/invoices/${invoice._id}?_method=DELETE" style="display: inline;">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذه الفاتورة؟')">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </form>
+                                            ${userPermissions.canUpdate ? `
+                                                <a href="/invoices/${invoice._id}/edit" class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                            ` : ''}
+                                            ${userPermissions.canDelete ? `
+                                                <form method="POST" action="/invoices/${invoice._id}?_method=DELETE" style="display: inline;">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذه الفاتورة؟')">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </form>
+                                            ` : ''}
                                         </div>
                                     </td>
                                 ` : ''}
@@ -67,7 +71,7 @@
                 <i class="fas fa-file-invoice fa-3x text-muted mb-3"></i>
                 <h5 class="text-muted">لا توجد فواتير حالياً</h5>
                 <p class="text-muted">ابدأ بإنشاء فاتورة جديدة</p>
-                ${currentUser.role === 'admin' || currentUser.permissions.canCreateInvoices ? `
+                ${userPermissions && userPermissions.canCreate ? `
                     <a href="/invoices/new" class="btn btn-primary">
                         <i class="fas fa-plus"></i>
                         إنشاء فاتورة جديدة

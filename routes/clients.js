@@ -1,27 +1,40 @@
 import express from 'express';
 import Client from '../models/Client.js';
-import { checkPermission } from '../middleware/auth.js';
+import { requireModuleAccess, requirePermission } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // List clients
-router.get('/', async (req, res) => {
+router.get('/', requireModuleAccess('clients'), async (req, res) => {
   try {
-    const clients = await Client.find().populate('createdBy', 'username').sort({ createdAt: -1 });
-    res.render('clients/index', { clients });
+    let query = {};
+    
+    // If user can only view own, filter by creator
+    if (!req.userPermissionLevel.canViewAll && req.userPermissionLevel.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const clients = await Client.find(query).populate('createdBy', 'username').sort({ createdAt: -1 });
+    res.render('clients/index', { 
+      clients,
+      userPermissions: req.userPermissionLevel
+    });
   } catch (error) {
     req.flash('error', 'حدث خطأ أثناء تحميل العملاء');
-    res.render('clients/index', { clients: [] });
+    res.render('clients/index', { 
+      clients: [],
+      userPermissions: req.userPermissionLevel || {}
+    });
   }
 });
 
 // New client form
-router.get('/new', checkPermission('canManageClients'), (req, res) => {
+router.get('/new', requirePermission('clients', 'create'), (req, res) => {
   res.render('clients/new');
 });
 
 // Create client
-router.post('/', checkPermission('canManageClients'), async (req, res) => {
+router.post('/', requirePermission('clients', 'create'), async (req, res) => {
   try {
     const { fullName, mobileNumber, notes, commissionRate } = req.body;
     
@@ -43,11 +56,18 @@ router.post('/', checkPermission('canManageClients'), async (req, res) => {
 });
 
 // Edit client form
-router.get('/:id/edit', checkPermission('canManageClients'), async (req, res) => {
+router.get('/:id/edit', requirePermission('clients', 'update'), async (req, res) => {
   try {
-    const client = await Client.findById(req.params.id);
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they own this client
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const client = await Client.findOne(query);
     if (!client) {
-      req.flash('error', 'العميل غير موجود');
+      req.flash('error', 'العميل غير موجود أو ليس لديك صلاحية للوصول إليه');
       return res.redirect('/clients');
     }
     res.render('clients/edit', { client });
@@ -58,16 +78,28 @@ router.get('/:id/edit', checkPermission('canManageClients'), async (req, res) =>
 });
 
 // Update client
-router.put('/:id', checkPermission('canManageClients'), async (req, res) => {
+router.put('/:id', requirePermission('clients', 'update'), async (req, res) => {
   try {
     const { fullName, mobileNumber, notes, commissionRate } = req.body;
     
-    await Client.findByIdAndUpdate(req.params.id, {
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they own this client
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const result = await Client.updateOne(query, {
       fullName,
       mobileNumber,
       notes,
       commissionRate: parseFloat(commissionRate) || 0
     });
+    
+    if (result.matchedCount === 0) {
+      req.flash('error', 'العميل غير موجود أو ليس لديك صلاحية لتعديله');
+      return res.redirect('/clients');
+    }
     
     req.flash('success', 'تم تحديث بيانات العميل بنجاح');
     res.redirect('/clients');
@@ -78,9 +110,22 @@ router.put('/:id', checkPermission('canManageClients'), async (req, res) => {
 });
 
 // Delete client
-router.delete('/:id', checkPermission('canManageClients'), async (req, res) => {
+router.delete('/:id', requirePermission('clients', 'delete'), async (req, res) => {
   try {
-    await Client.findByIdAndDelete(req.params.id);
+    let query = { _id: req.params.id };
+    
+    // If user can only view own, ensure they own this client
+    if (!req.userPermissionLevel?.canViewAll && req.userPermissionLevel?.canViewOwn) {
+      query.createdBy = req.session.user.id;
+    }
+    
+    const result = await Client.deleteOne(query);
+    
+    if (result.deletedCount === 0) {
+      req.flash('error', 'العميل غير موجود أو ليس لديك صلاحية لحذفه');
+      return res.redirect('/clients');
+    }
+    
     req.flash('success', 'تم حذف العميل بنجاح');
     res.redirect('/clients');
   } catch (error) {

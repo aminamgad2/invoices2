@@ -19,7 +19,7 @@ import commissionTierRoutes from './routes/commission-tiers.js';
 import reportRoutes from './routes/reports.js';
 
 // Import middleware
-import { requireAuth, requireAdmin } from './middleware/auth.js';
+import { requireAuth, requireAdmin, loadUserPermissions } from './middleware/auth.js';
 
 dotenv.config();
 
@@ -50,6 +50,9 @@ app.use(session({
 }));
 
 app.use(flash());
+
+// Load user permissions middleware
+app.use(loadUserPermissions);
 
 // Global variables
 app.use((req, res, next) => {
